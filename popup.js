@@ -170,6 +170,8 @@ document.getElementById("grab").addEventListener("click", async () => {
       }
 
       return (async () => {
+
+        //回到頂部
         const scrollTopButton = document.querySelector('button[aria-label="跳到頂部"]');
         if (scrollTopButton) {
             scrollTopButton.click();
@@ -178,13 +180,14 @@ document.getElementById("grab").addEventListener("click", async () => {
           while (true) {
             scrollBox.scrollTop = 0;
             await delay(500);
-            const flashExists = document.querySelector('[class*="flash_"]');
+            const flashExists = document.querySelector('[class*="heading-xxl"]');
             if (flashExists) break
           }
         }
 
         collected.push(...grabMessages());
 
+        //移到底部
         while (true) {
           scrollBox.scrollTop = scrollBox.scrollHeight;
           await delay(500);
@@ -193,22 +196,24 @@ document.getElementById("grab").addEventListener("click", async () => {
           if (!jumpToPresentBar) break;
         }
 
-        return collected;
+        const hasDeletedPost = !!document.querySelector('[class*="text-md/normal"]');
+        return { rawMessages: collected, hasDeletedPost };
       })();
     }
 
-    const [{ result: rawMessages }] = await chrome.scripting.executeScript({
+    const [{ result: { rawMessages, hasDeletedPost } }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: scrollAndCollectMessages,
       world: "MAIN"
     });
+
 
     if (!rawMessages || rawMessages.length === 0) {
       resultBox.textContent = "未擷取到留言，請確認 Discord 頁面有留言。";
       return;
     }
 
-    const messages = rawMessages.slice(1);
+    const messages = hasDeletedPost ? rawMessages : rawMessages.slice(1);
     const matchedMessages = messages.filter(m => pattern.test(m.content));
 
     const tempCandidates = [];
@@ -254,6 +259,7 @@ document.getElementById("grab").addEventListener("click", async () => {
       const scrollBox = document.querySelector('[data-list-id="chat-messages"]')?.closest('[role="group"]');
       if (!scrollBox) return result;
 
+      //頂部
       const scrollTopButton = document.querySelector('button[aria-label="跳到頂部"]');
       if (scrollTopButton) {
         scrollTopButton.click();
@@ -262,7 +268,7 @@ document.getElementById("grab").addEventListener("click", async () => {
         while (true) {
           scrollBox.scrollTop = 0;
           await delay(500);
-          const flashExists = document.querySelector('[class*="flash_"]');
+          const flashExists = document.querySelector('[class*="heading-xxl"]');
           if (flashExists) break;
         }
       }
@@ -305,6 +311,7 @@ document.getElementById("grab").addEventListener("click", async () => {
         const listItems = [...document.querySelectorAll('li[id^="chat-messages-"]')];
         await checkRealIdsFromListItems(listItems);
 
+        //底部
         scrollBox.scrollTop = scrollBox.scrollHeight;
         await delay(500);
         const jumpToPresentBar = document.querySelector('[class*="jumpToPresentBar"]');
