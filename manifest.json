@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Discord 留言擷取工具",
+  "version": "1.0",
+  "description": "快速擷取 Discord 頻道留言",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://discord.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
