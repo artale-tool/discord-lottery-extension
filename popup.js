@@ -30,6 +30,7 @@ function loadSavedResults() {
     const data = JSON.parse(savedDataStr);
     const { filteredCandidates, winners, duplicateAuthors, duplicateNumbers, keyword } = data;
 
+    const keywordInput = document.getElementById("keyword");
     const resultTitle = document.getElementById("resultTitle");
     const resultBox = document.getElementById("result");
     const winnersBox = document.getElementById("winners");
@@ -38,6 +39,9 @@ function loadSavedResults() {
     const duplicateNumbersTitle = document.getElementById("duplicateNumbersTitle");
     const duplicateNumbersBox = document.getElementById("duplicateNumbers");
 
+    if (keywordInput && keyword) {
+      keywordInput.value = keyword;
+    }
     if(resultTitle) {
       resultTitle.textContent = `留言清單（共 ${filteredCandidates.length} 位）`;
     }

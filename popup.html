@@ -9,7 +9,7 @@
       font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       max-width: 900px;
       margin: 1em auto;
-      padding: 0 1em;
+      padding: 0em 1em;
     }
     label {
       display: inline-block;
@@ -43,10 +43,40 @@
       padding-left: 1.2em;
       margin-top: 0.2em;
     }
+
+    .donate-button {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background-color: #f43f5e;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      text-decoration: none;
+      font-weight: bold;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      z-index: 9999;
+      transition: background-color 0.2s ease;
+    }
+
+    .donate-button:hover {
+      background-color: #e11d48;
+    }
   </style>
 </head>
 <body>
-  <h1>Discord 留言抽籤工具</h1>
+
+  <a
+    href="https://payment.opay.tw/Broadcaster/Donate/9F63A0D01BF401B3E4637E3CCB453A34"
+    class="donate-button"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    💖 贊助
+  </a>
+
+  <h1>Discord 留言抽籤</h1>
 
   <div>
     <label for="keyword">抽籤關鍵詞：</label>
