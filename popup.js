@@ -399,7 +399,16 @@ document.getElementById("grab").addEventListener("click", async () => {
       alert(`抽籤人數超過候選人數（${pool.length}），將改為抽全部候選人。`);
     }
 
-    const shuffled = pool.sort(() => Math.random() - 0.5);
+    function fisherYatesShuffle(array) {
+      const result = array.slice(); // 建立副本避免改到原始 pool
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1)); // 隨機選一個索引 j
+        [result[i], result[j]] = [result[j], result[i]]; // 交換位置
+      }
+      return result;
+    }
+
+    const shuffled = fisherYatesShuffle(pool);
     const winners = shuffled.slice(0, Math.min(drawCount, pool.length));
 
     // 顯示留言清單標題與內容
