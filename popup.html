@@ -84,8 +84,17 @@
   </div>
 
   <div>
+    <label for="keywordPosition">關鍵詞位置：</label>
+    <select id="keywordPosition">
+      <option value="front" selected>關鍵詞在前（例：推1）</option>
+      <option value="back">關鍵詞在後（例：1推）</option>
+      <option value="both">皆可（例：推1 或 1推）</option>
+    </select>
+  </div>
+
+  <div>
     <label for="drawCount">抽籤人數：</label>
-    <input type="number" id="drawCount" value="1" min="1" />
+    <input type="number" id="drawCount" value="1" min="0" />
   </div>
 
   <div>

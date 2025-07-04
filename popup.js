@@ -28,9 +28,11 @@ function loadSavedResults() {
 
   try {
     const data = JSON.parse(savedDataStr);
-    const { filteredCandidates, winners, duplicateAuthors, duplicateNumbers, keyword } = data;
+    const { filteredCandidates, winners, duplicateAuthors, duplicateNumbers, keyword, drawCount, keywordPosition } = data;
 
     const keywordInput = document.getElementById("keyword");
+    const keywordPositionSelect = document.getElementById("keywordPosition");
+    const drawCountInput = document.getElementById("drawCount");
     const resultTitle = document.getElementById("resultTitle");
     const resultBox = document.getElementById("result");
     const winnersBox = document.getElementById("winners");
@@ -41,6 +43,12 @@ function loadSavedResults() {
 
     if (keywordInput && keyword) {
       keywordInput.value = keyword;
+    }
+    if (drawCountInput && typeof drawCount === "number") {
+      drawCountInput.value = drawCount;
+    }
+    if (keywordPositionSelect && keywordPosition) {
+      keywordPositionSelect.value = keywordPosition;
     }
     if(resultTitle) {
       resultTitle.textContent = `留言清單（共 ${filteredCandidates.length} 位）`;
@@ -128,7 +136,7 @@ document.getElementById("grab").addEventListener("click", async () => {
 
   const keyword = document.getElementById("keyword").value.trim();
   const drawCountInput = document.getElementById("drawCount").value;
-  const drawCount = Math.max(1, parseInt(drawCountInput) || 1);
+  const drawCount = Math.max(0, parseInt(drawCountInput) || 0);
   const dupMode = document.getElementById("dupMode").value; // exclude | keepFirst | allow
 
   if (!keyword) {
@@ -137,7 +145,19 @@ document.getElementById("grab").addEventListener("click", async () => {
   }
 
   const escapedKeyword = escapeRegExp(keyword);
-  const pattern = new RegExp(`${escapedKeyword}(\\d+)`);
+  const keywordPosition = document.getElementById("keywordPosition").value;
+
+  let pattern;
+  if (keywordPosition === "front") {
+    // 關鍵詞在前，後面接數字，如 推123
+    pattern = new RegExp(`${escapedKeyword}(\\d+)`);
+  } else if (keywordPosition === "back") {
+    // 數字在前，關鍵詞在後，如 123推
+    pattern = new RegExp(`(\\d+)${escapedKeyword}`);
+  } else if (keywordPosition === "both") {
+    // 兩種都要配對，如 推123 或 123推
+    pattern = new RegExp(`(?:${escapedKeyword}(\\d+)|(\\d+)${escapedKeyword})`);
+  }
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -224,7 +244,16 @@ document.getElementById("grab").addEventListener("click", async () => {
     matchedMessages.forEach(m => {
       const match = m.content.match(pattern);
       if (match) {
-        const num = parseInt(match[1], 10);
+
+        let numStr = null;
+        if (keywordPosition === "both") {
+          // match[1] 是關鍵詞前面的數字, match[2] 是關鍵詞後面的數字
+          numStr = match[1] || match[2];
+        } else {
+          numStr = match[1];
+        }
+
+        const num = parseInt(numStr, 10);
         if (!isNaN(num)) {
           tempCandidates.push({
             author: m.author,
@@ -409,7 +438,7 @@ document.getElementById("grab").addEventListener("click", async () => {
     }
 
     const shuffled = fisherYatesShuffle(pool);
-    const winners = shuffled.slice(0, Math.min(drawCount, pool.length));
+    const winners = drawCount > 0 ? shuffled.slice(0, Math.min(drawCount, pool.length)) : [];
 
     // 顯示留言清單標題與內容
     if(resultTitle) {
@@ -424,6 +453,11 @@ document.getElementById("grab").addEventListener("click", async () => {
       li.textContent = `${w.author} - ${keyword}${w.number}`;
       winnersBox.appendChild(li);
     });
+    if (drawCount === 0 && winnersBox) {
+      const li = document.createElement("li");
+      li.textContent = "（未執行抽獎，只分析留言）";
+      winnersBox.appendChild(li);
+    }
 
     // 顯示重複留言名單
     duplicateAuthorsBox.innerHTML = "";
@@ -479,6 +513,8 @@ document.getElementById("grab").addEventListener("click", async () => {
       duplicateAuthors: duplicateAuthorsObj,
       duplicateNumbers: Object.fromEntries(duplicateNumbers),
       keyword,
+      drawCount,
+      keywordPosition
     };
     localStorage.setItem("drawResults", JSON.stringify(saveData));
 
