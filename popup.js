@@ -179,10 +179,10 @@ document.getElementById("grab").addEventListener("click", async () => {
           if (!usernameEl || !contentEl) return;
 
           const author = usernameEl.textContent.trim();
-          const content = contentEl.textContent.trim();
+          const content = contentEl.childNodes[0]?.textContent.trim();
           const usernameHTML = usernameEl.outerHTML;
 
-          if (author && content) {
+          if (author) {
             const key = author + "|||" + content;
             if (!seenKeys.has(key)) {
               seenKeys.add(key);
