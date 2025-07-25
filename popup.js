@@ -2,6 +2,140 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+let allCandidates = [];
+let realAccountMap = {};
+let winners = [];
+
+function renderAllResults({ winners = [], duplicateAuthors = {}, duplicateNumbers = {} }) {
+  const resultTitle = document.getElementById("resultTitle");
+  const resultBox = document.getElementById("result");
+  const winnersBox = document.getElementById("winners");
+  const duplicateAuthorsTitle = document.getElementById("duplicateAuthorsTitle");
+  const duplicateAuthorsBox = document.getElementById("duplicateAuthors");
+  const duplicateNumbersTitle = document.getElementById("duplicateNumbersTitle");
+  const duplicateNumbersBox = document.getElementById("duplicateNumbers");
+
+  if (resultTitle) {
+    resultTitle.textContent = `留言清單（共 ${allCandidates.length} 位，含無效留言）`;
+  }
+
+  resultBox.innerHTML = "";
+  allCandidates.forEach((m) => {
+    const div = document.createElement("div");
+    div.style.marginBottom = "8px";
+    div.style.paddingBottom = "8px";
+    div.style.borderBottom = "1px solid #ccc";  // 加分隔線
+    div.style.display = "flex";
+    div.style.justifyContent = "space-between";
+    div.style.alignItems = "center";
+    div.style.gap = "10px";
+
+    const span = document.createElement("span");
+    span.textContent = `${m.author}: ${m.content}`;
+    span.style.flex = "1";
+    span.style.whiteSpace = "pre-wrap"; // 若內容太長可自動換行
+
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "刪除";
+    delBtn.style.padding = "2px 8px";
+    delBtn.style.fontSize = "12px";
+    delBtn.style.backgroundColor = "#f44336";
+    delBtn.style.color = "white";
+    delBtn.style.border = "none";
+    delBtn.style.borderRadius = "4px";
+    delBtn.style.cursor = "pointer";
+
+    delBtn.addEventListener("click", () => {
+      const index = allCandidates.findIndex(c => c.author === m.author && c.content === m.content);
+      if (index !== -1) {
+        allCandidates.splice(index, 1);
+        refreshAfterDelete();
+      }
+    });
+
+    div.appendChild(span);
+    div.appendChild(delBtn);
+    resultBox.appendChild(div);
+  });
+
+  winnersBox.innerHTML = "";
+  if (winners.length > 0) {
+    winners.forEach(w => {
+      const li = document.createElement("li");
+      li.textContent = `${w.nickname} - ${w.keyword}${w.number}`;
+      winnersBox.appendChild(li);
+    });
+  } else {
+    const li = document.createElement("li");
+    li.textContent = "（未執行抽獎，只分析留言）";
+    winnersBox.appendChild(li);
+  }
+
+  // ===== 重複帳號留言 =====
+
+  duplicateAuthorsBox.innerHTML = "";
+  if (duplicateAuthors && Object.keys(duplicateAuthors).length > 0) {
+    duplicateAuthorsTitle.textContent = `重複帳號留言清單（共 ${Object.keys(duplicateAuthors).length} 位）`;
+    for (const [realId, data] of Object.entries(duplicateAuthors)) {
+      const nickname = data.nickname || realId;
+      const msgs = data.messages || [];
+      const nums = msgs.map(m => `${m.keyword}${m.number}`);
+      const div = document.createElement("div");
+      div.textContent = `${nickname} (${nums.join(", ")})`;
+      duplicateAuthorsBox.appendChild(div);
+    }
+  } else {
+    duplicateAuthorsTitle.textContent = "重複帳號留言清單";
+    duplicateAuthorsBox.textContent = "無重複留言帳號";
+  }
+
+  // ===== 重複推號 =====
+  duplicateNumbersBox.innerHTML = "";
+  if (duplicateNumbers && Object.keys(duplicateNumbers).length > 0) {
+    duplicateNumbersTitle.textContent = `重複推號留言清單（共 ${Object.keys(duplicateNumbers).length} 位）`;
+    for (const [number, msgs] of Object.entries(duplicateNumbers)) {
+      msgs.forEach(m => {
+        const div = document.createElement("div");
+        div.textContent = `${m.nickname} - ${m.keyword}${number}`;
+        duplicateNumbersBox.appendChild(div);
+      });
+    }
+  } else {
+    duplicateNumbersTitle.textContent = "重複推號留言清單";
+    duplicateNumbersBox.textContent = "無重複推號留言";
+  }
+
+  // 儲存到 localStorage
+  const saveData = {
+    rawKeywords: document.getElementById("keyword").value.trim(),
+    drawCount: parseInt(document.getElementById("drawCount").value) || 0,
+    keywordPosition: document.getElementById("keywordPosition").value,
+    dupMode: document.getElementById("dupMode").value,
+    allCandidates,
+    realAccountMap,
+    winners,
+    duplicateAuthors,
+    duplicateNumbers,
+  };
+  localStorage.setItem("drawResults", JSON.stringify(saveData));
+}
+
+function refreshAfterDelete() {
+  const finalMessages = applyRealId();
+  const { allAuthorsMessages, duplicateAuthors } = analyzeDuplicates(finalMessages);
+  const dupMode = document.getElementById("dupMode").value;
+  const filteredCandidates = filterByDupMode(finalMessages, allAuthorsMessages, dupMode);
+  const { duplicateNumbers } = filterUniqueNumbers(filteredCandidates);
+
+  // ✅ 不重新抽籤，只更新畫面
+  renderAllResults({
+    winners,
+    duplicateAuthors: Object.fromEntries(duplicateAuthors),
+    duplicateNumbers: Object.fromEntries(duplicateNumbers)
+  });
+}
+
 // 重設所有結果區與標題
 function resetUI() {
   const resultTitle = document.getElementById("resultTitle");
@@ -21,88 +155,43 @@ function resetUI() {
   if (duplicateNumbersBox) duplicateNumbersBox.innerHTML = "";
 }
 
-// 載入並顯示 localStorage 內的結果
 function loadSavedResults() {
   const savedDataStr = localStorage.getItem("drawResults");
   if (!savedDataStr) return;
 
   try {
     const data = JSON.parse(savedDataStr);
-    const { filteredCandidates, winners, duplicateAuthors, duplicateNumbers, keyword, drawCount, keywordPosition } = data;
+    const {
+      rawKeywords,
+      drawCount,
+      keywordPosition,
+      dupMode,
+      allCandidates: loaded_all,
+      realAccountMap: loaded_real,
+      winners,
+      duplicateAuthors,
+      duplicateNumbers
+    } = data;
+
+    allCandidates = loaded_all;
+    realAccountMap = loaded_real;
 
     const keywordInput = document.getElementById("keyword");
     const keywordPositionSelect = document.getElementById("keywordPosition");
     const drawCountInput = document.getElementById("drawCount");
-    const resultTitle = document.getElementById("resultTitle");
-    const resultBox = document.getElementById("result");
-    const winnersBox = document.getElementById("winners");
-    const duplicateAuthorsTitle = document.getElementById("duplicateAuthorsTitle");
-    const duplicateAuthorsBox = document.getElementById("duplicateAuthors");
-    const duplicateNumbersTitle = document.getElementById("duplicateNumbersTitle");
-    const duplicateNumbersBox = document.getElementById("duplicateNumbers");
+    const dupModeInput = document.getElementById("dupMode");
 
-    if (keywordInput && keyword) {
-      keywordInput.value = keyword;
-    }
-    if (drawCountInput && typeof drawCount === "number") {
-      drawCountInput.value = drawCount;
-    }
-    if (keywordPositionSelect && keywordPosition) {
-      keywordPositionSelect.value = keywordPosition;
-    }
-    if(resultTitle) {
-      resultTitle.textContent = `留言清單（共 ${filteredCandidates.length} 位）`;
-    }
-    if(resultBox) {
-      resultBox.textContent = filteredCandidates.map(m => `${m.author}: ${m.content}`).join("\n");
-    }
+    if (keywordInput && rawKeywords) keywordInput.value = rawKeywords;
+    if (drawCountInput && typeof drawCount === "number") drawCountInput.value = drawCount;
+    if (keywordPositionSelect && keywordPosition) keywordPositionSelect.value = keywordPosition;
+    if (dupModeInput && dupMode) dupModeInput.value = dupMode;
 
-    if(winnersBox) {
-      winnersBox.innerHTML = "";
-      winners.forEach(w => {
-        const li = document.createElement("li");
-        li.textContent = `${w.author} - ${keyword}${w.number}`;
-        winnersBox.appendChild(li);
-      });
-    }
-
-    if (duplicateAuthorsBox) {
-      duplicateAuthorsBox.innerHTML = "";
-      if (duplicateAuthors && Object.keys(duplicateAuthors).length > 0) {
-        if (duplicateAuthorsTitle) {
-          duplicateAuthorsTitle.textContent = `重複帳號留言清單（共 ${Object.keys(duplicateAuthors).length} 位）`;
-        }
-        for (const [realId, data] of Object.entries(duplicateAuthors)) {
-          const nickname = data.nickname || realId;
-          const msgs = data.messages || [];
-          const nums = msgs.map(m => `${keyword}${m.number}`);
-          const div = document.createElement("div");
-          div.textContent = `${nickname} (${nums.join(", ")})`;
-          duplicateAuthorsBox.appendChild(div);
-        }
-      } else {
-        duplicateAuthorsBox.textContent = "無重複留言帳號";
-      }
-    }
-
-    if (duplicateNumbersBox) {
-      duplicateNumbersBox.innerHTML = "";
-      if (duplicateNumbers && Object.keys(duplicateNumbers).length > 0) {
-        if (duplicateNumbersTitle) {
-          duplicateNumbersTitle.textContent = `重複推號留言清單（共 ${Object.keys(duplicateNumbers).length} 位）`;
-        }
-        for (const [number, msgs] of Object.entries(duplicateNumbers)) {
-          msgs.forEach(m => {
-            const div = document.createElement("div");
-            div.textContent = `${m.author} - ${keyword}${number}`;
-            duplicateNumbersBox.appendChild(div);
-          });
-        }
-      } else {
-        duplicateNumbersBox.textContent = "無重複推號留言";
-      }
-    }
-  } catch(e) {
+    renderAllResults({ 
+      winners,
+      duplicateAuthors,
+      duplicateNumbers,
+    });
+  } catch (e) {
     console.warn("無法讀取儲存的抽籤結果", e);
   }
 }
@@ -111,20 +200,128 @@ window.addEventListener("load", loadSavedResults);
 
 // 清空按鈕事件
 document.getElementById("clearBtn").addEventListener("click", () => {
+  // 只重設結果畫面，不清除欄位設定
   resetUI();
-  localStorage.removeItem("drawResults");
+
+  // 清除畫面用資料，但保留設定欄位
+  const rawKeywords = document.getElementById("keyword").value.trim();
+  const drawCount = parseInt(document.getElementById("drawCount").value) || 0;
+  const keywordPosition = document.getElementById("keywordPosition").value;
+  const dupMode = document.getElementById("dupMode").value;
+
+  // 清空資料
+  allCandidates = [];
+  realAccountMap = {};
+  winners = [];
+
+  // 更新 localStorage，但保留設定
+  const saveData = {
+    rawKeywords,
+    drawCount,
+    keywordPosition,
+    dupMode,
+    allCandidates: [],
+    realAccountMap: [],
+    winners: [],
+    duplicateAuthors: [],
+    duplicateNumbers: [],
+  };
+  localStorage.setItem("drawResults", JSON.stringify(saveData));
 });
 
+function applyRealId() {
+  return allCandidates.map(m => {
+    const key = `${m.author}___${m.usernameHTML}___${m.content}`;
+    const realid = realAccountMap[key] || m.author;
+    const { author, ...rest } = m; // 先用解構去除 author
+    return {
+      ...rest,
+      nickname: m.author,
+      realid: realid,
+    };
+  });
+}
+
+function analyzeDuplicates(messages) {
+  const allAuthorsMessages = new Map(); // 根據真帳號ID分組留言
+  const duplicateAuthors = new Map(); // 有重複留言（留言數 > 1）的帳號
+
+  messages.forEach(m => {
+    const id = m.realid;  // 用 realid 當 key
+    if (!allAuthorsMessages.has(id)) allAuthorsMessages.set(id, []);
+    allAuthorsMessages.get(id).push(m);
+  });
+
+  allAuthorsMessages.forEach((msgs, realid) => {
+    if (msgs.length > 1) {
+      const nickname = msgs[0].nickname;
+      duplicateAuthors.set(realid, {
+        nickname,
+        messages: msgs
+      });
+    }
+  });
+
+  return { allAuthorsMessages, duplicateAuthors };
+}
+
+function filterByDupMode(messages, allAuthorsMessages, mode) {
+  if (mode === "allow") return messages;
+
+  const seen = new Set();
+  const result = [];
+
+  messages.forEach(m => {
+    const isDuplicate = allAuthorsMessages.get(m.realid)?.length > 1;
+
+    if (mode === "keepFirst" && !seen.has(m.realid)) {
+      result.push(m);
+      seen.add(m.realid);
+    } else if (mode === "exclude" && !isDuplicate) {
+      result.push(m);
+    }
+  });
+
+  return result;
+}
+
+function filterUniqueNumbers(candidates) {
+  const seenNumbers = new Set();
+  const unique = [];
+  const duplicateNumbers = new Map();
+
+  candidates.forEach(c => {
+    if (seenNumbers.has(c.number)) {
+      if (!duplicateNumbers.has(c.number)) duplicateNumbers.set(c.number, []);
+      duplicateNumbers.get(c.number).push(c);
+    } else {
+      seenNumbers.add(c.number);
+      unique.push(c);
+    }
+  });
+
+  return { uniqueNumberCandidates: unique, duplicateNumbers };
+}
+
+
+function drawWinners(pool, count) {
+  const result = [...pool]; // 複製
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return count > 0 ? result.slice(0, Math.min(count, pool.length)) : [];
+}
+
+
+
 // 抓取按鈕事件
-document.getElementById("grab").addEventListener("click", async () => {
+document.getElementById("fetchBtn").addEventListener("click", async () => {
   resetUI();
 
-  const resultTitle = document.getElementById("resultTitle");
   const resultBox = document.getElementById("result");
   const winnersBox = document.getElementById("winners");
-  const duplicateAuthorsTitle = document.getElementById("duplicateAuthorsTitle");
   const duplicateAuthorsBox = document.getElementById("duplicateAuthors");
-  const duplicateNumbersTitle = document.getElementById("duplicateNumbersTitle");
   const duplicateNumbersBox = document.getElementById("duplicateNumbers");
 
   winnersBox.innerHTML = "";
@@ -134,30 +331,28 @@ document.getElementById("grab").addEventListener("click", async () => {
 
   resultBox.textContent = "自動滾動載入留言中，請稍候...";
 
-  const keyword = document.getElementById("keyword").value.trim();
-  const drawCountInput = document.getElementById("drawCount").value;
-  const drawCount = Math.max(0, parseInt(drawCountInput) || 0);
+  const rawKeywords  = document.getElementById("keyword").value.trim();
   const dupMode = document.getElementById("dupMode").value; // exclude | keepFirst | allow
 
-  if (!keyword) {
+  if (!rawKeywords ) {
     alert("請輸入關鍵詞");
     return;
   }
 
-  const escapedKeyword = escapeRegExp(keyword);
+  const keywords = rawKeywords.split(",").map(k => k.trim()).filter(Boolean);
+  // const escapedKeyword = escapeRegExp(keyword);
   const keywordPosition = document.getElementById("keywordPosition").value;
 
-  let pattern;
-  if (keywordPosition === "front") {
-    // 關鍵詞在前，後面接數字，如 推123
-    pattern = new RegExp(`${escapedKeyword}(\\d+)`);
-  } else if (keywordPosition === "back") {
-    // 數字在前，關鍵詞在後，如 123推
-    pattern = new RegExp(`(\\d+)${escapedKeyword}`);
-  } else if (keywordPosition === "both") {
-    // 兩種都要配對，如 推123 或 123推
-    pattern = new RegExp(`(?:${escapedKeyword}(\\d+)|(\\d+)${escapedKeyword})`);
-  }
+  const patterns = keywords.map(kw => {
+    const escaped = escapeRegExp(kw);
+    if (keywordPosition === "front") {
+      return { kw, regex: new RegExp(`(?:^|\\s)${escaped}(\\d+)`) };
+    } else if (keywordPosition === "back") {
+      return { kw, regex: new RegExp(`(?:^|\\s)(\\d+)${escaped}`) };
+    } else {
+      return { kw, regex: new RegExp(`(?:^|\\s)(?:${escaped}(\\d+)|(\\d+)${escaped})`) };
+    }
+  });
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -174,8 +369,9 @@ document.getElementById("grab").addEventListener("click", async () => {
         const items = document.querySelectorAll('li[id^="chat-messages-"]');
         const newMsgs = [];
         items.forEach(item => {
-          const usernameEl = item.querySelector('[class^="username_"]');
-          const contentEl = item.querySelector('[class^="markup_"]');
+          const contentContainer = item.querySelector('[class^="contents_"]');
+          const usernameEl = contentContainer?.querySelector('[class^="username_"]');
+          const contentEl = contentContainer?.querySelector('[id*="message-content-"]')?.childNodes[0];
           if (!usernameEl || !contentEl) return;
 
           const author = usernameEl.textContent.trim();
@@ -209,6 +405,7 @@ document.getElementById("grab").addEventListener("click", async () => {
           }
         }
 
+        const hasDeletedPost = !!document.querySelector('[class*="text-md/normal"]');
         collected.push(...grabMessages());
 
         //移到底部
@@ -220,7 +417,6 @@ document.getElementById("grab").addEventListener("click", async () => {
           if (!jumpToPresentBar) break;
         }
 
-        const hasDeletedPost = !!document.querySelector('[class*="text-md/normal"]');
         return { rawMessages: collected, hasDeletedPost };
       })();
     }
@@ -238,36 +434,42 @@ document.getElementById("grab").addEventListener("click", async () => {
     }
 
     const messages = hasDeletedPost ? rawMessages : rawMessages.slice(1);
-    const matchedMessages = messages.filter(m => pattern.test(m.content));
+    const matchedMessages = messages.filter(m =>
+      patterns.some(({ regex }) => regex.test(m.content))
+    );
 
-    const tempCandidates = [];
+    allCandidates = [];
     matchedMessages.forEach(m => {
-      const match = m.content.match(pattern);
-      if (match) {
+      for (const { kw, regex } of patterns) {
+        const match = m.content.match(regex);
+        if (match) {
 
-        let numStr = null;
-        if (keywordPosition === "both") {
-          // match[1] 是關鍵詞前面的數字, match[2] 是關鍵詞後面的數字
-          numStr = match[1] || match[2];
-        } else {
-          numStr = match[1];
-        }
+          let numStr = null;
+          if (keywordPosition === "both") {
+            // match[1] 是關鍵詞前面的數字, match[2] 是關鍵詞後面的數字
+            numStr = match[1] || match[2];
+          } else {
+            numStr = match[1];
+          }
 
-        const num = parseInt(numStr, 10);
-        if (!isNaN(num)) {
-          tempCandidates.push({
-            author: m.author,
-            content: m.content,
-            number: num,
-            usernameHTML: m.usernameHTML
-          });
+          const num = parseInt(numStr, 10);
+          if (!isNaN(num)) {
+            allCandidates.push({
+              author: m.author,
+              content: m.content,
+              number: num,
+              keyword: kw,
+              usernameHTML: m.usernameHTML
+            });
+            break;
+          }
         }
       }
     });
 
     // 群組 nickname，找出重複暱稱
     const nicknameMap = new Map();
-    tempCandidates.forEach(m => {
+    allCandidates.forEach(m => {
       if (!nicknameMap.has(m.author)) nicknameMap.set(m.author, []);
       nicknameMap.get(m.author).push(m);
     });
@@ -359,167 +561,72 @@ document.getElementById("grab").addEventListener("click", async () => {
 
     resultBox.textContent = "🔍 檢查重複 ID 中，請稍候...";
 
-    const [{ result: realAccountMap }] = await chrome.scripting.executeScript({
+    const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: findRealAccountMap,
       args: [duplicateMessages],
       world: "MAIN"
     });
 
-    // 更新 author 為真帳號（如果有）
-    const finalMessages = tempCandidates.map(m => {
-      const key = `${m.author}___${m.usernameHTML}___${m.content}`;
-      return {
-        ...m,
-        author: realAccountMap[key] || m.author
-      };
+    realAccountMap = result;
+
+    // 依 realId 更新作者欄位
+    const finalMessages = applyRealId();
+
+    // 分析留言（群組作者留言 & 抓出重複帳號）
+    const { allAuthorsMessages, duplicateAuthors } = analyzeDuplicates(finalMessages);
+
+    // 根據選擇的帳號重複處理方式過濾
+    const filteredCandidates = filterByDupMode(finalMessages, allAuthorsMessages, dupMode);
+
+    // 過濾唯一推號
+    const { duplicateNumbers } = filterUniqueNumbers(filteredCandidates);
+
+    // 繪製畫面
+    renderAllResults({
+      duplicateAuthors: Object.fromEntries(duplicateAuthors),
+      duplicateNumbers: Object.fromEntries(duplicateNumbers)
     });
-
-    // 群組留言 by realId
-    const allAuthorsMessages = new Map();
-    finalMessages.forEach(c => {
-      if (!allAuthorsMessages.has(c.author)) allAuthorsMessages.set(c.author, []);
-      allAuthorsMessages.get(c.author).push(c);
-    });
-
-    // 重複留言名單（realId）
-    const duplicateAuthors = new Map();
-    allAuthorsMessages.forEach((msgs, author) => {
-      if (msgs.length > 1) duplicateAuthors.set(author, msgs);
-    });
-
-    // 三種抽籤模式處理
-    let filteredCandidates = [];
-    if (dupMode === "allow") {
-      filteredCandidates = finalMessages;
-    } else if (dupMode === "keepFirst") {
-      const seen = new Set();
-      finalMessages.forEach(c => {
-        if (!seen.has(c.author)) {
-          filteredCandidates.push(c);
-          seen.add(c.author);
-        }
-      });
-    } else if (dupMode === "exclude") {
-      finalMessages.forEach(c => {
-        if (allAuthorsMessages.get(c.author).length === 1) {
-          filteredCandidates.push(c);
-        }
-      });
-    }
-
-    // 重複推號處理
-    const seenNumbers = new Set();
-    const uniqueNumberCandidates = [];
-    const duplicateNumbers = new Map();
-
-    for (const c of filteredCandidates) {
-      if (!seenNumbers.has(c.number)) {
-        uniqueNumberCandidates.push(c);
-        seenNumbers.add(c.number);
-      } else {
-        if (!duplicateNumbers.has(c.number)) duplicateNumbers.set(c.number, []);
-        duplicateNumbers.get(c.number).push(c);
-      }
-    }
-
-    const pool = uniqueNumberCandidates;
-    if (drawCount > pool.length) {
-      alert(`抽籤人數超過候選人數（${pool.length}），將改為抽全部候選人。`);
-    }
-
-    function fisherYatesShuffle(array) {
-      const result = array.slice(); // 建立副本避免改到原始 pool
-      for (let i = result.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1)); // 隨機選一個索引 j
-        [result[i], result[j]] = [result[j], result[i]]; // 交換位置
-      }
-      return result;
-    }
-
-    const shuffled = fisherYatesShuffle(pool);
-    const winners = drawCount > 0 ? shuffled.slice(0, Math.min(drawCount, pool.length)) : [];
-
-    // 顯示留言清單標題與內容
-    if(resultTitle) {
-      resultTitle.textContent = `留言清單（共 ${filteredCandidates.length} 位）`;
-    }
-    resultBox.textContent = filteredCandidates.map(m => `${m.author}: ${m.content}`).join("\n");
-
-    // 顯示中獎名單
-    winnersBox.innerHTML = "";
-    winners.forEach(w => {
-      const li = document.createElement("li");
-      li.textContent = `${w.author} - ${keyword}${w.number}`;
-      winnersBox.appendChild(li);
-    });
-    if (drawCount === 0 && winnersBox) {
-      const li = document.createElement("li");
-      li.textContent = "（未執行抽獎，只分析留言）";
-      winnersBox.appendChild(li);
-    }
-
-    // 顯示重複留言名單
-    duplicateAuthorsBox.innerHTML = "";
-    if (duplicateAuthors.size > 0) {
-      if (duplicateAuthorsTitle) {
-        duplicateAuthorsTitle.textContent = `重複帳號留言清單（共 ${duplicateAuthors.size} 位）`;
-      }
-      duplicateAuthors.forEach((msgs, realId) => {
-        // nickname: 用 realAccountMap 找對應暱稱
-        const someKey = Object.entries(realAccountMap).find(([k, v]) => v === realId);
-        let nickname = someKey ? someKey[0].split("___")[0] : realId;
-        const nums = msgs.map(m => `${keyword}${m.number}`);
-        const div = document.createElement("div");
-        div.textContent = `${nickname} (${nums.join(", ")})`;
-        duplicateAuthorsBox.appendChild(div);
-      });
-    } else {
-      duplicateAuthorsBox.textContent = "無重複留言帳號";
-    }
-
-    // 顯示重複推號留言
-    duplicateNumbersBox.innerHTML = "";
-    if (duplicateNumbers.size > 0) {
-      if (duplicateNumbersTitle) {
-        duplicateNumbersTitle.textContent = `重複推號留言清單（共 ${duplicateNumbers.size} 位）`;
-      }
-      duplicateNumbers.forEach((msgs, number) => {
-        msgs.forEach(m => {
-          const div = document.createElement("div");
-          div.textContent = `${m.author} - ${keyword}${number}`;
-          duplicateNumbersBox.appendChild(div);
-        });
-      });
-    } else {
-      duplicateNumbersBox.textContent = "無重複推號留言";
-    }
-
-
-    // 加入 nickname 資訊一起儲存
-    const duplicateAuthorsObj = {};
-    duplicateAuthors.forEach((msgs, realId) => {
-      const nickname = (Object.entries(realAccountMap).find(([k, v]) => v === realId)?.[0].split("___")[0]) || realId;
-      duplicateAuthorsObj[realId] = {
-        nickname,
-        messages: msgs
-      };
-    });
-
-    // 儲存結果到 localStorage
-    const saveData = {
-      filteredCandidates,
-      winners,
-      duplicateAuthors: duplicateAuthorsObj,
-      duplicateNumbers: Object.fromEntries(duplicateNumbers),
-      keyword,
-      drawCount,
-      keywordPosition
-    };
-    localStorage.setItem("drawResults", JSON.stringify(saveData));
 
   } catch (err) {
     resultBox.textContent = `❌ 擷取或抽籤失敗：${err.message}`;
     console.error(err);
   }
+});
+
+
+document.getElementById("drawBtn").addEventListener("click", () => {
+  if (!allCandidates || allCandidates.length === 0) {
+    alert("請先擷取留言");
+    return;
+  }
+
+  const savedDataStr = localStorage.getItem("drawResults");
+  const data = JSON.parse(savedDataStr);
+  const {
+    duplicateAuthors,
+    duplicateNumbers
+  } = data;
+
+  const drawCount = Math.max(0, parseInt(document.getElementById("drawCount").value) || 0);
+  const dupMode = document.getElementById("dupMode").value;
+
+  const finalMessages = applyRealId();
+  const { allAuthorsMessages } = analyzeDuplicates(finalMessages);
+  const filteredCandidates = filterByDupMode(finalMessages, allAuthorsMessages, dupMode);
+  const { uniqueNumberCandidates } = filterUniqueNumbers(filteredCandidates);
+
+  const pool = uniqueNumberCandidates;
+
+  if (drawCount > pool.length) {
+    alert(`抽籤人數超過候選人數（${pool.length}），將改為抽全部候選人。`);
+  }
+
+  winners = drawWinners(pool, drawCount);
+
+  renderAllResults({
+    winners, 
+    duplicateAuthors,
+    duplicateNumbers
+  });
 });

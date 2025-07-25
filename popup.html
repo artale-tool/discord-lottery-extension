@@ -79,8 +79,18 @@
   <h1>Discord 留言抽籤</h1>
 
   <div>
-    <label for="keyword">抽籤關鍵詞：</label>
-    <input type="text" id="keyword" value="推" placeholder="例如 推" />
+    <label for="keyword">
+      抽籤關鍵詞：<br />
+      <small style="color: gray;">
+        可輸入多個關鍵詞，請用逗號（,）隔開
+      </small>
+    </label><br />
+    <input
+      type="text"
+      id="keyword"
+      value="推"
+      placeholder="例如：推,抽"
+    />
   </div>
 
   <div>
@@ -106,13 +116,24 @@
     </select>
   </div>
 
-  <button id="grab">開始擷取並抽籤</button>
+  <button id="fetchBtn">擷取留言</button>
+  <button id="drawBtn">開始抽獎</button>
   <button id="clearBtn">清空結果</button>
 
-  <h3><strong id="resultTitle">擷取到的推文留言（純文字版）</strong></h3>
+  <h3>
+    <strong id="resultTitle">擷取到的推文留言</strong>
+    <small style="font-weight: normal; display: block; color: #666;">
+      （刪除留言後，重複帳號與重複推號名單將自動同步更新）
+    </small>
+  </h3>
   <pre id="result">尚未擷取</pre>
 
-  <h3><strong id="winnersTitle">🎉抽籤中籤名單</strong></h3>
+  <h3>
+    <strong id="winnersTitle">🎉抽籤中籤名單</strong>
+    <small style="font-weight: normal; display: block; color: #666;">
+      （依據「重複帳號留言處理方式」進行過濾，僅從有效留言中抽出，並自動排除重複推號）
+    </small>
+  </h3>
   <ul id="winners"></ul>
 
   <h3><strong id="duplicateAuthorsTitle">重複帳號留言清單（被排除或保留的留言）</strong></h3>
